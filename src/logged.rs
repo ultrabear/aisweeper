@@ -130,7 +130,7 @@ impl LoggedGameBoard {
 		Ok(())
 	}
 	pub fn flag_tile(&mut self, x: u16, y: u16) -> Result<(), UnopenableError> {
-		let res = self.board.flag_tile(x, y)?;
+		self.board.flag_tile(x, y)?;
 
 		self.events.push(LogFrame {
 			trace: KeyEventEffect::Mouse2(x, y, GameBoardEvent::flag_cell(x, y)),
