@@ -1,5 +1,5 @@
 use crate::types;
-use types::{GameBoard, Tile, VisibleTile};
+use types::{Tile, VisibleTile};
 
 use cursive::{
 	event,
@@ -111,7 +111,9 @@ impl View for MineGameView {
 				event,
 				offset,
 			} => {
-				if (position.y - offset.y) == 0 {
+				if ((position.y as isize) - (offset.y as isize)) <= 0 {
+					return EventResult::Ignored;
+				} else if ((position.x as isize) - (offset.x as isize)) < 0 {
 					return EventResult::Ignored;
 				}
 
