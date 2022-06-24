@@ -21,8 +21,8 @@ pub enum UnopenableError {
 	FlaggedTile,
 	#[error("this tile is out of bounds")]
 	OutOfBounds,
-  #[error("flag count does not match count of tile")]
-  FlagCountMismatch,
+	#[error("flag count does not match count of tile")]
+	FlagCountMismatch,
 }
 
 #[derive(Error, Debug)]

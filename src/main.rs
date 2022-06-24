@@ -51,7 +51,7 @@ fn main() {
 
 	cursive.add_global_callback('q', |s| s.quit());
 
-  cursive.set_fps(3);
+	cursive.set_fps(3);
 
 	cursive.run();
 }

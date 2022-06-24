@@ -2,8 +2,8 @@ use crate::types;
 use types::{GameBoard, Tile, VisibleTile};
 
 use cursive::{
+	event,
 	theme::{BaseColor, Color, ColorStyle, ColorType},
-  event,
 	view::View,
 	Printer, XY,
 };
@@ -68,17 +68,16 @@ fn visible_tile_to_cursive(v: VisibleTile) -> (ColorStyle, String) {
 
 impl View for MineGameView {
 	fn draw(&self, p: &Printer<'_, '_>) {
+		p.print((0, 0), format!("{}", self.board.bomb_count()).as_str());
 
-    p.print((0,0), format!("{}", self.board.bomb_count()).as_str());
-
-    let base_render = self.board.render();
+		let base_render = self.board.render();
 
 		for (y_idx, y) in base_render.iter().enumerate() {
 			for (x_idx, x) in y.into_iter().enumerate() {
 				let (style, string) = visible_tile_to_cursive(*x);
 
 				p.with_color(style, |colored_print| {
-					colored_print.print((x_idx * 2, y_idx+1), string.as_str())
+					colored_print.print((x_idx * 2, y_idx + 1), string.as_str())
 				});
 			}
 		}
@@ -93,49 +92,57 @@ impl View for MineGameView {
 		}
 	}
 
-  fn on_event(&mut self, e: event::Event) -> event::EventResult {
-    use std::io::prelude::*;
-    let mut elog = std::fs::OpenOptions::new().write(true).create(true).append(true).open("elog.txt").unwrap();
+	fn on_event(&mut self, e: event::Event) -> event::EventResult {
+		use std::io::prelude::*;
+		let mut elog = std::fs::OpenOptions::new()
+			.write(true)
+			.create(true)
+			.append(true)
+			.open("elog.txt")
+			.unwrap();
 
-    let log_err = |e| elog.write(format!("{:?} {}\n", e, e).as_bytes()).unwrap();
-      
+		let log_err = |e| elog.write(format!("{:?} {}\n", e, e).as_bytes()).unwrap();
 
-    use event::{Event, EventResult, MouseEvent, MouseButton};
+		use event::{Event, EventResult, MouseButton, MouseEvent};
 
-    match e {
+		match e {
+			Event::Mouse {
+				position,
+				event,
+				offset,
+			} => {
+				if (position.y - offset.y) == 0 {
+					return EventResult::Ignored;
+				}
 
-      Event::Mouse{position, event, offset} => {
+				let board_p = (
+					((position.x - offset.x) / 2) as u16,
+					((position.y - offset.y) - 1) as u16,
+				);
 
-        if (position.y - offset.y) == 0 {
-          return EventResult::Ignored;
-        }
+				match event {
+					MouseEvent::Press(b) => match b {
+						MouseButton::Left => {
+							let _ = self
+								.board
+								.do_event(KeyEvent::Mouse1(board_p.0, board_p.1))
+								.map_err(log_err);
+							EventResult::Consumed(None)
+						}
+						MouseButton::Right => {
+							let _ = self
+								.board
+								.do_event(KeyEvent::Mouse2(board_p.0, board_p.1))
+								.map_err(log_err);
+							EventResult::Consumed(None)
+						}
 
-        let board_p = (((position.x - offset.x) / 2) as u16, ((position.y - offset.y) - 1) as u16);
-
-        match event {
-          MouseEvent::Press(b) => {
-            match b {
-            MouseButton::Left => {
-              let _ = self.board.do_event(KeyEvent::Mouse1(board_p.0, board_p.1)).map_err(log_err);
-              EventResult::Consumed(None)
-            },
-            MouseButton::Right => {
-              let _ = self.board.do_event(KeyEvent::Mouse2(board_p.0, board_p.1)).map_err(log_err);
-              EventResult::Consumed(None)
-            },
-
-            _ => {
-              EventResult::Ignored
-            },
-            }
-        },
-        _ => EventResult::Ignored,
-      }
-
-    },
-    _ => EventResult::Ignored,
-    }
-
-  }
-
+						_ => EventResult::Ignored,
+					},
+					_ => EventResult::Ignored,
+				}
+			}
+			_ => EventResult::Ignored,
+		}
+	}
 }

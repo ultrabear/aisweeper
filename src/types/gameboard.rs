@@ -215,22 +215,26 @@ impl GameBoard {
 
 		let mut rng = rand::thread_rng();
 
-    // SAFETY: panics are impossible on 64 bit machines due to bombcount and area being u32
-    // 32 bit machines might overflow isize constraints, but at that point there is no memory left
+		// SAFETY: panics are impossible on 64 bit machines due to bombcount and area being u32
+		// 32 bit machines might overflow isize constraints, but at that point there is no memory left
 		let mut arr: Vec<bool> = repeat(true)
-			.take(self.bomb_count().try_into().expect("bomb count overflowed usize"))
+			.take(
+				self.bomb_count()
+					.try_into()
+					.expect("bomb count overflowed usize"),
+			)
 			.chain(repeat(false))
 			.take(self.area().try_into().expect("area overflowed usize"))
 			.collect();
 
 		arr.shuffle(&mut rng);
 
-    // flattens a [y][x] indexed flat array into its true index
+		// flattens a [y][x] indexed flat array into its true index
 		let flatten = |x, y| ((y * usize::from(self.dimensions().0)) + x);
 
 		let mut reroute = true;
 
-    // keep looping until no bombs were rerouted
+		// keep looping until no bombs were rerouted
 		while reroute {
 			reroute = false;
 
@@ -285,9 +289,9 @@ impl GameBoard {
 	) -> Result<Self, NewBoardError> {
 		let mut gb = Self::blank_board(x, y, bombs)?;
 
-    if !((clearx < x) && (cleary < y)) {
-      Err(NewBoardError::SizeConstraintOverflow)?;
-    }
+		if !((clearx < x) && (cleary < y)) {
+			Err(NewBoardError::SizeConstraintOverflow)?;
+		}
 
 		gb.populate_without(clearx, cleary)?;
 
@@ -362,21 +366,26 @@ impl GameBoard {
 
 		let mut opened = Vec::with_capacity(openable.len());
 
-    let mut bombcnt = 0u32;
+		let mut bombcnt = 0u32;
 
-    for &(x, y) in openable.iter() {
+		for &(x, y) in openable.iter() {
+			let tile = self.board[y][x];
 
-      let tile = self.board[y][x];
+			if tile.visible == Visibility::Flagged {
+				bombcnt += 1;
+			}
+		}
 
-      if tile.visible == Visibility::Flagged {
-        bombcnt += 1;
-      } 
-    }
+		if bombcnt
+			!= (self
+				.tile_or_unopenable(x, y)?
+				.tile
+				.as_count()
+				.ok_or(UnopenableError::BombHit)? as u32)
+		{
+			return Err(UnopenableError::FlagCountMismatch);
+		}
 
-    if bombcnt != (self.tile_or_unopenable(x, y)?.tile.as_count().ok_or(UnopenableError::BombHit)? as u32) {
-      return Err(UnopenableError::FlagCountMismatch);
-    }
-    
 		for &(x, y) in openable.iter() {
 			let tile = self.board[y][x];
 
@@ -395,8 +404,8 @@ impl GameBoard {
 			}
 		}
 
-    // open visible tiles to complete cycle
-    opened.extend(self.open_visible());
+		// open visible tiles to complete cycle
+		opened.extend(self.open_visible());
 
 		Ok(opened)
 	}
@@ -411,18 +420,18 @@ impl GameBoard {
 				if tile.visible == Visibility::Visible && tile.tile == Tile::Zero {
 					// runtime safety: all tiles around a tile are not bombs because the current tile is a Zero
 
-          let mut open = vec![];
+					let mut open = vec![];
 
-          for (x, y) in self.normalize_around_3x3(x as u16, y as u16) {
-            let (x, y) = (x as u16, y as u16);
-            match self.get(x, y).unwrap().visible {
-              Visibility::NotVisible => {
-                open.push((x, y));
-                self.get_mut(x, y).unwrap().visible = Visibility::Visible;
-              }
-              _ => (),
-            }
-          }
+					for (x, y) in self.normalize_around_3x3(x as u16, y as u16) {
+						let (x, y) = (x as u16, y as u16);
+						match self.get(x, y).unwrap().visible {
+							Visibility::NotVisible => {
+								open.push((x, y));
+								self.get_mut(x, y).unwrap().visible = Visibility::Visible;
+							}
+							_ => (),
+						}
+					}
 
 					opened_count += open.len();
 					opened.extend(open);

@@ -7,4 +7,4 @@ mod errors;
 pub use errors::{NewBoardError, UnopenableError};
 
 mod gameboard;
-pub use gameboard::{GameBoard, GameBoardEvent, FlatBoard};
+pub use gameboard::{FlatBoard, GameBoard, GameBoardEvent};
