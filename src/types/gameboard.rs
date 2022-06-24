@@ -330,36 +330,6 @@ impl GameBoard {
 		})
 	}
 
-	/// makes all tiles visible, compromising a game boards state
-	//#[cfg(debug_assertions)]
-	pub unsafe fn make_visible(&mut self) {
-		for x in self.board.iter_backing_mut() {
-			x.visible = Visibility::Visible;
-		}
-	}
-
-	//#[cfg(debug_assertions)]
-	pub unsafe fn flag_bombs(&mut self) {
-		for t in self.board.iter_backing_mut() {
-			if let Tile::Bomb = t.tile {
-				t.visible = Visibility::Flagged;
-			}
-		}
-	}
-	//#[cfg(debug_assertions)]
-	pub unsafe fn cover_half(&mut self) {
-		let mut rng = rand::thread_rng();
-
-		for x in self.board.iter_backing_mut() {
-			if rng.gen() && rng.gen() {
-				x.visible = match x.visible {
-					Visibility::Visible => Visibility::NotVisible,
-					v @ _ => v,
-				}
-			}
-		}
-	}
-
 	/// opens the 8 tiles around a tile
 	pub fn open_around(&mut self, x: u16, y: u16) -> Result<Vec<(u16, u16)>, UnopenableError> {
 		let openable = self.normalize_around_3x3(x, y);
@@ -418,23 +388,18 @@ impl GameBoard {
 			for x in 0..self.board[y].len() {
 				let tile = self.board[y][x];
 				if tile.visible == Visibility::Visible && tile.tile == Tile::Zero {
-					// runtime safety: all tiles around a tile are not bombs because the current tile is a Zero
-
-					let mut open = vec![];
-
 					for (x, y) in self.normalize_around_3x3(x as u16, y as u16) {
 						let (x, y) = (x as u16, y as u16);
 						match self.get(x, y).unwrap().visible {
 							Visibility::NotVisible => {
-								open.push((x, y));
+								opened.push((x, y));
+								opened_count += 1;
+								// SAFETY: all tiles around a tile are not bombs because the current tile is a Zero, so overwrite with a Visible
 								self.get_mut(x, y).unwrap().visible = Visibility::Visible;
 							}
 							_ => (),
 						}
 					}
-
-					opened_count += open.len();
-					opened.extend(open);
 				}
 			}
 		}
