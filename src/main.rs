@@ -11,13 +11,11 @@ use cursive::crossterm;
 fn main() {
 	let mut cursive = crossterm();
 
-	let gb = LoggedGameBoard::start_new(30, 16, 99, 5, 5).unwrap();
-
-	cursive.add_layer(MineGameView::new(gb));
+	cursive.add_layer(MineGameView::new(16, 16, 40).unwrap());
 
 	cursive.add_global_callback('q', |s| s.quit());
 
-	cursive.set_fps(3);
+	cursive.set_fps(2);
 
 	cursive.run();
 }

@@ -209,7 +209,7 @@ impl GameBoard {
 		// include self in valid
 		valid.push((x.into(), y.into()));
 
-		if (self.area() - self.bombs) < valid.len() as u32 {
+		if (self.area() - self.bombs) < 9 {
 			return Err(NewBoardError::BombOverflow);
 		}
 
@@ -252,19 +252,9 @@ impl GameBoard {
 	}
 
 	/// generates a blank board without adding bombs to it, but stores bomb count
-	fn blank_board(x: u16, y: u16, bombs: u32) -> Result<Self, NewBoardError> {
-		Self::validate_size_constraints(x, y, bombs)?;
-
-		let area: u32 = u32::from(x) * u32::from(y);
-		if area < bombs {
-			return Err(NewBoardError::BombOverflow);
-		}
-
-		if x == 0 || y == 0 {
-			return Err(NewBoardError::ZeroDimension);
-		}
-
-		let gb = Self {
+	/// assumes precondition of a valid board config
+	fn blank_board(x: u16, y: u16, bombs: u32) -> Self {
+		Self {
 			bombs,
 			board: gen_2d_array(
 				y.into(),
@@ -274,9 +264,42 @@ impl GameBoard {
 					visible: Visibility::NotVisible,
 				},
 			),
-		};
+		}
+	}
 
-		Ok(gb)
+	/// validation method for a new board, able to run publically for validating board configs before more costly generation
+	/// it is in theory safe to call unwrap_unchecked on associated new methods if this function does not return Err with the same configuration, however this is not recommended
+	pub fn validate_board(
+		x: u16,
+		y: u16,
+		bombs: u32,
+		has_clearing: bool,
+		clearing_coordinates: impl Into<Option<(u16, u16)>>,
+	) -> Result<(), NewBoardError> {
+		Self::validate_size_constraints(x, y, bombs)?;
+
+		let area: u32 = widening_mul(x, y);
+		if area < bombs {
+			return Err(NewBoardError::BombOverflow);
+		}
+
+		if x == 0 || y == 0 {
+			return Err(NewBoardError::ZeroDimension);
+		}
+
+		if let Some((clearx, cleary)) = clearing_coordinates.into() {
+			if !((clearx < x) && (cleary < y)) {
+				return Err(NewBoardError::SizeConstraintOverflow);
+			}
+		}
+
+		if has_clearing {
+			if (area - bombs) < 9 {
+				return Err(NewBoardError::BombOverflow);
+			}
+		}
+
+		Ok(())
 	}
 
 	/// generates a new board with a given clear zone where no bombs will be guaranteed
@@ -287,11 +310,9 @@ impl GameBoard {
 		clearx: u16,
 		cleary: u16,
 	) -> Result<Self, NewBoardError> {
-		let mut gb = Self::blank_board(x, y, bombs)?;
+		Self::validate_board(x, y, bombs, true, (clearx, cleary))?;
 
-		if !((clearx < x) && (cleary < y)) {
-			Err(NewBoardError::SizeConstraintOverflow)?;
-		}
+		let mut gb = Self::blank_board(x, y, bombs);
 
 		gb.populate_without(clearx, cleary)?;
 
@@ -300,7 +321,8 @@ impl GameBoard {
 
 	/// generates a new board
 	pub fn new(x: u16, y: u16, bombs: u32) -> Result<Self, NewBoardError> {
-		let mut gb = Self::blank_board(x, y, bombs)?;
+		Self::validate_board(x, y, bombs, false, None)?;
+		let mut gb = Self::blank_board(x, y, bombs);
 
 		gb.populate();
 

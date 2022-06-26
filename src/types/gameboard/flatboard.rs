@@ -1,7 +1,7 @@
 use std::iter::repeat;
 use std::ops::{Index, IndexMut};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FlatBoard<T> {
 	dim_1: usize,
 	dim_2: usize,

@@ -1,7 +1,6 @@
 use std::fmt;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-#[repr(u8)]
 pub enum Tile {
 	Zero = 0,
 	One,
@@ -27,7 +26,7 @@ impl Tile {
 	pub fn as_count(&self) -> Option<u8> {
 		match self {
 			Tile::Bomb => None,
-			v @ _ => Some(*v as u8),
+			&v @ _ => Some(v as u8),
 		}
 	}
 
@@ -92,7 +91,6 @@ impl TryFrom<u8> for Tile {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-#[repr(u8)]
 pub(super) enum Visibility {
 	Visible,
 	NotVisible,
@@ -117,8 +115,7 @@ impl BoardTile {
 	}
 }
 
-#[derive(Debug, Copy, Clone)]
-#[repr(u8)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum VisibleTile {
 	NotVisible,
 	Visible(Tile),

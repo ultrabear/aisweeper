@@ -1,5 +1,5 @@
 use crate::types;
-use types::{Tile, VisibleTile};
+use types::{FlatBoard, GameBoard, NewBoardError, Tile, VisibleTile};
 
 use cursive::{
 	event,
@@ -8,15 +8,97 @@ use cursive::{
 	Printer, XY,
 };
 
+use std::cell::Cell;
+
 use super::{logged, logged::KeyEvent};
 
+// a lazy init logged game board that allows for init at any time and supports most derived methods for a game board
+enum LazyGameBoard {
+	Init(logged::LoggedGameBoard),
+	Uninit { x: u16, y: u16, bombs: u32 },
+}
+
+impl LazyGameBoard {
+	fn init_with_mut(&mut self, clearx: u16, cleary: u16) -> &mut logged::LoggedGameBoard {
+		use LazyGameBoard::*;
+
+		match self {
+			Init(board) => return board,
+			Uninit { x, y, bombs } => {
+				let board =
+					logged::LoggedGameBoard::start_new(*x, *y, *bombs, clearx, cleary).unwrap();
+				*self = Init(board);
+			}
+		}
+
+		self.must_init_mut()
+	}
+
+	fn must_init_mut(&mut self) -> &mut logged::LoggedGameBoard {
+		use LazyGameBoard::*;
+
+		match self {
+			Init(board) => board,
+			Uninit { .. } => unreachable!(),
+		}
+	}
+
+	fn must_init(&self, clearx: u16, cleary: u16) -> &logged::LoggedGameBoard {
+		use LazyGameBoard::*;
+
+		match self {
+			Init(board) => board,
+			Uninit { .. } => unreachable!(),
+		}
+	}
+
+	fn area(&self) -> u32 {
+		use LazyGameBoard::*;
+		match self {
+			Init(board) => board.area(),
+			Uninit { x, y, .. } => u32::from(*x) * u32::from(*y),
+		}
+	}
+
+	fn dimensions(&self) -> (u16, u16) {
+		use LazyGameBoard::*;
+		match self {
+			Init(board) => board.dimensions(),
+			Uninit { x, y, .. } => (*x, *y),
+		}
+	}
+
+	fn bomb_count(&self) -> u32 {
+		use LazyGameBoard::*;
+		match self {
+			Init(board) => board.bomb_count(),
+			Uninit { bombs, .. } => *bombs,
+		}
+	}
+
+	fn render(&self) -> FlatBoard<VisibleTile> {
+		use LazyGameBoard::*;
+
+		match self {
+			Init(board) => board.render(),
+			Uninit { x, y, .. } => {
+				FlatBoard::new((*y).into(), (*x).into(), VisibleTile::NotVisible)
+			}
+		}
+	}
+}
+
 pub struct MineGameView {
-	board: logged::LoggedGameBoard,
+	board: LazyGameBoard,
 }
 
 impl MineGameView {
-	pub fn new(board: logged::LoggedGameBoard) -> Self {
-		Self { board }
+	pub fn new(x: u16, y: u16, bombs: u32) -> Result<Self, NewBoardError> {
+		GameBoard::validate_board(x, y, bombs, false, None)?;
+
+		Ok(Self {
+			board: LazyGameBoard::Uninit { x, y, bombs },
+		})
 	}
 }
 
@@ -68,7 +150,7 @@ fn visible_tile_to_cursive(v: VisibleTile) -> (ColorStyle, String) {
 
 impl View for MineGameView {
 	fn draw(&self, p: &Printer<'_, '_>) {
-		p.print((0, 0), format!("{}", self.board.bomb_count()).as_str());
+		p.print((0usize, 0), format!("{}", self.board.bomb_count()).as_str());
 
 		let base_render = self.board.render();
 
@@ -127,18 +209,20 @@ impl View for MineGameView {
 						MouseButton::Left => {
 							let _ = self
 								.board
+								.init_with_mut(board_p.0, board_p.1)
 								.do_event(KeyEvent::Mouse1(board_p.0, board_p.1))
 								.map_err(log_err);
 							EventResult::Consumed(None)
 						}
-						MouseButton::Right => {
-							let _ = self
-								.board
-								.do_event(KeyEvent::Mouse2(board_p.0, board_p.1))
-								.map_err(log_err);
-							EventResult::Consumed(None)
-						}
-
+						MouseButton::Right => match &mut self.board {
+							LazyGameBoard::Init(board) => {
+								let _ = board
+									.do_event(KeyEvent::Mouse2(board_p.0, board_p.1))
+									.map_err(log_err);
+								EventResult::Consumed(None)
+							}
+							LazyGameBoard::Uninit { .. } => EventResult::Ignored,
+						},
 						_ => EventResult::Ignored,
 					},
 					_ => EventResult::Ignored,
