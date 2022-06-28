@@ -1,4 +1,3 @@
-use std::fmt;
 use std::iter::repeat;
 
 use rand::prelude::*;
@@ -61,7 +60,7 @@ impl GameBoard {
 	}
 
 	/// validates that bomb counts and size counts do not exceed hard coded limits for sanity
-	fn validate_size_constraints(x: u16, y: u16, bombs: u32) -> Result<(), NewBoardError> {
+	const fn validate_size_constraints(x: u16, y: u16, bombs: u32) -> Result<(), NewBoardError> {
 		if x > 10_000 || y > 10_000 || bombs > 100_000_000 {
 			Err(NewBoardError::SizeConstraintOverflow)
 		} else {
@@ -233,10 +232,8 @@ impl GameBoard {
 			}
 		}
 
-		if has_clearing {
-			if (area - bombs) < 9 {
-				return Err(NewBoardError::BombOverflow);
-			}
+		if has_clearing && (area - bombs) < 9 {
+			return Err(NewBoardError::BombOverflow);
 		}
 
 		Ok(())
@@ -262,14 +259,11 @@ impl GameBoard {
 				if tile.visible == Visibility::Visible && tile.tile == Tile::Zero {
 					for (x, y) in self.normalize_around_3x3(x as u16, y as u16) {
 						let (x, y) = (x as u16, y as u16);
-						match self.get(x, y).unwrap().visible {
-							Visibility::NotVisible => {
-								opened.push((x, y));
-								opened_count += 1;
-								// SAFETY: all tiles around a tile are not bombs because the current tile is a Zero, so overwrite with a Visible
-								self.get_mut(x, y).unwrap().visible = Visibility::Visible;
-							}
-							_ => (),
+						if self.get(x, y).unwrap().visible == Visibility::NotVisible {
+							opened.push((x, y));
+							opened_count += 1;
+							// SAFETY: all tiles around a tile are not bombs because the current tile is a Zero, so overwrite with a Visible
+							self.get_mut(x, y).unwrap().visible = Visibility::Visible;
 						}
 					}
 				}
@@ -348,7 +342,8 @@ impl BaseGameBoard for GameBoard {
 
 			match tile.visible {
 				// ignore visible tiles
-				Visibility::Visible => (),
+				// don't attempt to open flagged tiles
+				Visibility::Visible | Visibility::Flagged => (),
 				Visibility::NotVisible => {
 					// if the notvisible tile we are trying to open is a bomb raise error
 					assert_not_bomb(tile.tile)?;
@@ -356,8 +351,6 @@ impl BaseGameBoard for GameBoard {
 					self.board[y][x].visible = Visibility::Visible;
 					opened.push((x as u16, y as u16));
 				}
-				// don't attempt to open flagged tiles
-				Visibility::Flagged => (),
 			}
 		}
 
@@ -378,7 +371,7 @@ impl BaseGameBoard for GameBoard {
 			Visibility::NotVisible => Ok(()),
 		}?;
 
-		if let Tile::Bomb = tile.tile {
+		if tile.tile.is_bomb() {
 			return Err(UnopenableError::BombHit);
 		}
 
@@ -426,7 +419,7 @@ impl BaseGameBoard for GameBoard {
 
 	/// undoes a move specified by a gameboard event
 	fn undo_move(&mut self, event: &GameBoardEvent) -> Result<(), UndoError> {
-		Ok(match event {
+		match event {
 			GameBoardEvent::ToggleFlagCell(x, y) => self
 				.get_mut(*x, *y)
 				.ok_or(UndoError::OutOfBounds)?
@@ -436,14 +429,16 @@ impl BaseGameBoard for GameBoard {
 				for (x, y) in cells.iter().copied() {
 					let tile = self.get_mut(x, y).ok_or(UndoError::OutOfBounds)?;
 
-					if let Visibility::Visible = tile.visible {
+					if Visibility::Visible == tile.visible {
 						tile.visible = Visibility::NotVisible;
 					} else {
 						Err(UndoError::AlreadyClosed)?
 					}
 				}
 			}
-		})
+		}
+
+		Ok(())
 	}
 
 	fn render(&self) -> FlatBoard<VisibleTile> {

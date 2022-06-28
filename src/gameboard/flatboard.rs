@@ -53,18 +53,18 @@ impl<T: Clone> FlatBoard<T> {
 
 impl<T> FlatBoard<T> {
 	/// returns dimensions of flatboard
-	#[inline(always)]
-	pub fn dimensions(&self) -> (usize, usize) {
+	#[inline]
+	pub const fn dimensions(&self) -> (usize, usize) {
 		(self.dim_1, self.dim_2)
 	}
 
 	/// returns dim_1 as len
-	#[inline(always)]
-	pub fn len(&self) -> usize {
+	#[inline]
+	pub const fn len(&self) -> usize {
 		self.dim_1
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn get(&self, idx: usize) -> Option<&Row<T>> {
 		if self.dim_1 <= idx {
 			None
@@ -75,7 +75,7 @@ impl<T> FlatBoard<T> {
 		}
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn get_mut(&mut self, idx: usize) -> Option<&mut Row<T>> {
 		if self.dim_1 <= idx {
 			None
@@ -86,12 +86,12 @@ impl<T> FlatBoard<T> {
 		}
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn iter(&self) -> impl Iterator<Item = &[T]> {
 		self.data.chunks(self.dim_2)
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut [T]> {
 		self.data.chunks_mut(self.dim_2)
 	}
@@ -114,7 +114,7 @@ impl<'a, T: 'a> IterBackingMut<'a, T, IterMut<'a, T>> for FlatBoard<T> {
 impl<T> Index<usize> for FlatBoard<T> {
 	type Output = Row<T>;
 
-	#[inline(always)]
+	#[inline]
 	fn index(&self, index: usize) -> &Self::Output {
 		match self.get(index) {
 			None => panic!(
@@ -127,7 +127,7 @@ impl<T> Index<usize> for FlatBoard<T> {
 }
 
 impl<T> IndexMut<usize> for FlatBoard<T> {
-	#[inline(always)]
+	#[inline]
 	fn index_mut(&mut self, index: usize) -> &mut Self::Output {
 		// hack around get_mut mutable borrow invalidating immutable borrows to self
 		let dim_1 = self.dim_1;

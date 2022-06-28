@@ -17,7 +17,7 @@ impl From<Vec<(u16, u16)>> for GameBoardEvent {
 }
 
 impl GameBoardEvent {
-	pub fn flag_tile(x: u16, y: u16) -> Self {
+	pub const fn flag_tile(x: u16, y: u16) -> Self {
 		Self::ToggleFlagCell(x, y)
 	}
 }
@@ -36,13 +36,14 @@ pub enum KeyEvent {
 	Idle,
 }
 
+#[allow(non_snake_case)]
 pub fn BaseGameBoard_do_event<T: BaseGameBoard>(
 	t: &mut T,
 	k: KeyEvent,
 ) -> Result<(), UnopenableError> {
 	use KeyEvent::*;
 
-	Ok(match k {
+	match k {
 		Mouse1(x, y) => {
 			let tile = t.get_board_tile(x, y).ok_or(UnopenableError::OutOfBounds)?;
 
@@ -70,7 +71,9 @@ pub fn BaseGameBoard_do_event<T: BaseGameBoard>(
 			}
 		}
 		_ => {}
-	})
+	}
+
+	Ok(())
 }
 
 pub trait BaseGameBoard: Sized {

@@ -10,8 +10,6 @@ use gameboard::{
 	VisibleTile,
 };
 
-use time;
-
 /// internally stored keyevent that also stores any effect it had on the gameboard
 enum KeyEventEffect {
 	Mouse1(u16, u16, GameBoardEvent),
@@ -29,8 +27,7 @@ impl TryFrom<KeyEvent> for KeyEventEffect {
 
 	fn try_from(k: KeyEvent) -> Result<Self, Self::Error> {
 		match k {
-			KeyEvent::Mouse1(_, _) => Err(RequiresGameBoardEvent),
-			KeyEvent::Mouse2(_, _) => Err(RequiresGameBoardEvent),
+			KeyEvent::Mouse1(_, _) | KeyEvent::Mouse2(_, _) => Err(RequiresGameBoardEvent),
 			KeyEvent::Pause => Ok(KeyEventEffect::Pause),
 			KeyEvent::UnPause => Ok(KeyEventEffect::UnPause),
 			KeyEvent::Idle => Ok(KeyEventEffect::Idle),
@@ -74,7 +71,7 @@ impl<T: BaseGameBoard> LoggedGameBoard<T> {
 			trace: KeyEventEffect::Mouse1(
 				x,
 				y,
-				board.board.open_tile(opening_x, opening_y).unwrap().into(),
+				board.board.open_tile(opening_x, opening_y).unwrap(),
 			),
 			time_offset_micros: board.current_micros_offset(),
 		});
@@ -138,8 +135,8 @@ impl<T: BaseGameBoard> BaseGameBoard for LoggedGameBoard<T> {
 						.get_board_tile(x, y)
 						.ok_or(UnopenableError::OutOfBounds)?;
 					let event: GameBoardEvent = match tile {
-						VisibleTile::NotVisible => self.board.open_tile(x, y)?.into(),
-						VisibleTile::Visible(_) => self.board.open_around(x, y)?.into(),
+						VisibleTile::NotVisible => self.board.open_tile(x, y)?,
+						VisibleTile::Visible(_) => self.board.open_around(x, y)?,
 						VisibleTile::Flagged => {
 							return Err(UnopenableError::FlaggedTile);
 						}
@@ -155,8 +152,9 @@ impl<T: BaseGameBoard> BaseGameBoard for LoggedGameBoard<T> {
 						.get_board_tile(x, y)
 						.ok_or(UnopenableError::OutOfBounds)?;
 					match tile {
-						VisibleTile::NotVisible => self.board.flag_tile(x, y)?,
-						VisibleTile::Flagged => self.board.flag_tile(x, y)?,
+						VisibleTile::NotVisible | VisibleTile::Flagged => {
+							self.board.flag_tile(x, y)?
+						}
 						VisibleTile::Visible(_) => {
 							return Err(UnopenableError::AlreadyOpen);
 						}
@@ -167,7 +165,7 @@ impl<T: BaseGameBoard> BaseGameBoard for LoggedGameBoard<T> {
 						time_offset_micros: self.current_micros_offset(),
 					});
 				}
-				v @ _ => self.events.push(LogFrame {
+				v => self.events.push(LogFrame {
 					trace: v.try_into().expect(
 						"Impossible invariant (KeyEvent Mouse1 and Mouse2 already handled)",
 					),

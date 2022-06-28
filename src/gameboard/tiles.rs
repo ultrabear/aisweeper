@@ -15,24 +15,21 @@ pub enum Tile {
 }
 
 impl Tile {
-	pub fn is_bomb(&self) -> bool {
-		match self {
-			Tile::Bomb => true,
-			_ => false,
-		}
+	pub const fn is_bomb(self) -> bool {
+		matches!(self, Tile::Bomb)
 	}
 
 	// Returns self as count of bombs in 8 surrounding squares, or None if is a bomb
-	pub fn as_count(&self) -> Option<u8> {
+	pub const fn as_count(self) -> Option<u8> {
 		match self {
 			Tile::Bomb => None,
-			&v @ _ => Some(v as u8),
+			v => Some(v as u8),
 		}
 	}
 
 	/// returns count as a single width string, where a bomb is represented by a B
 	/// used as a pre end user stage for naked processing
-	pub fn as_str_count(&self) -> &'static str {
+	pub const fn as_str_count(self) -> &'static str {
 		match self {
 			Tile::Zero => " ",
 			Tile::One => "1",
@@ -107,11 +104,12 @@ pub(super) struct AlreadyOpen;
 
 impl BoardTile {
 	pub(super) fn swap_flag(&mut self) -> Result<(), AlreadyOpen> {
-		Ok(match self.visible {
+		match self.visible {
 			Visibility::Visible => Err(AlreadyOpen)?,
 			Visibility::NotVisible => self.visible = Visibility::Flagged,
 			Visibility::Flagged => self.visible = Visibility::NotVisible,
-		})
+		}
+		Ok(())
 	}
 }
 

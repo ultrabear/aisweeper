@@ -35,7 +35,7 @@ pub enum UndoError {
 	AlreadyOpen,
 }
 
-pub fn assert_not_bomb(t: Tile) -> Result<(), UnopenableError> {
+pub const fn assert_not_bomb(t: Tile) -> Result<(), UnopenableError> {
 	match t {
 		Tile::Bomb => Err(UnopenableError::BombHit),
 		_ => Ok(()),

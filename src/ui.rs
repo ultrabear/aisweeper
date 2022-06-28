@@ -1,6 +1,6 @@
 /// main ui interactions, houses rendering for game view and integrations with cursive
 use crate::gameboard;
-use gameboard::{BaseGameBoard, FlatBoard, GameBoard, KeyEvent, NewBoardError, Tile, VisibleTile};
+use gameboard::{BaseGameBoard, GameBoard, KeyEvent, NewBoardError, Tile, VisibleTile};
 
 use cursive::{
 	event,
@@ -32,7 +32,7 @@ fn visible_tile_to_cursive(v: VisibleTile) -> (ColorStyle, String) {
 		};
 	}
 
-	fn colorof(tile: Tile) -> ColorType {
+	const fn colorof(tile: Tile) -> ColorType {
 		match tile {
 			Tile::Zero => tty_color!(Dark::Black),
 			Tile::One => tty_color!(Light::Blue),
@@ -78,11 +78,11 @@ impl<B: BaseGameBoard + 'static> View for MineGameView<B> {
 		let base_render = self.board.render();
 
 		for (y_idx, y) in base_render.iter().enumerate() {
-			for (x_idx, x) in y.into_iter().enumerate() {
+			for (x_idx, x) in y.iter().enumerate() {
 				let (style, string) = visible_tile_to_cursive(*x);
 
 				p.with_color(style, |colored_print| {
-					colored_print.print((x_idx * 2, y_idx + 1), string.as_str())
+					colored_print.print((x_idx * 2, y_idx + 1), string.as_str());
 				});
 			}
 		}
@@ -116,16 +116,19 @@ impl<B: BaseGameBoard + 'static> View for MineGameView<B> {
 				event,
 				offset,
 			} => {
-				if ((position.y as isize) - (offset.y as isize)) <= 0 {
-					return EventResult::Ignored;
-				} else if ((position.x as isize) - (offset.x as isize)) < 0 {
+				if ((position.y as isize) - (offset.y as isize)) <= 0
+					|| ((position.x as isize) - (offset.x as isize)) < 0
+				{
 					return EventResult::Ignored;
 				}
 
-				let board_p = (
-					((position.x - offset.x) / 2) as u16,
-					((position.y - offset.y) - 1) as u16,
-				);
+				let board_p: (u16, u16) = (|| {
+					Some((
+						((position.x - offset.x) / 2).try_into().ok()?,
+						((position.y - offset.y) - 1).try_into().ok()?,
+					))
+				})()
+				.unwrap_or((u16::MAX, u16::MAX));
 
 				match event {
 					MouseEvent::Press(b) => match b {

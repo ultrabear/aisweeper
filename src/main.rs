@@ -1,5 +1,6 @@
-#![warn(clippy::nursery)]
+//#![warn(clippy::nursery)]
 #![warn(clippy::pedantic)]
+//#![warn(clippy::cargo)]
 mod gameboard;
 mod lazy;
 mod logged;
@@ -11,6 +12,7 @@ use logged::LoggedGameBoard;
 use ui::MineGameView;
 
 use cursive::crossterm;
+use cursive::Cursive;
 
 fn main() {
 	let mut cursive = crossterm();
@@ -20,7 +22,7 @@ fn main() {
 
 	cursive.add_layer(view);
 
-	cursive.add_global_callback('q', |s| s.quit());
+	cursive.add_global_callback('q', Cursive::quit);
 
 	cursive.set_fps(2);
 
