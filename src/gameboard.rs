@@ -1,3 +1,7 @@
+//! main game logic for a minesweeper game
+//!
+//! this module defines the [GameBoard], the core implementation of [BaseGameBoard], that has basic minesweeper logic implemented
+
 use std::iter::repeat;
 
 use rand::prelude::*;
@@ -207,7 +211,8 @@ impl GameBoard {
 	}
 
 	/// validation method for a new board, able to run publically for validating board configs before more costly generation
-	/// it is in theory safe to call unwrap_unchecked on associated new methods if this function does not return Err with the same configuration, however this is not recommended
+	///
+	/// it is in theory safe to call [`Result::unwrap_unchecked`] on associated new methods if this function does not return Err with the same configuration, however this is not recommended anyways
 	pub fn validate_board(
 		x: u16,
 		y: u16,
@@ -432,7 +437,7 @@ impl BaseGameBoard for GameBoard {
 					if Visibility::Visible == tile.visible {
 						tile.visible = Visibility::NotVisible;
 					} else {
-						Err(UndoError::AlreadyClosed)?
+						return Err(UndoError::AlreadyClosed);
 					}
 				}
 			}

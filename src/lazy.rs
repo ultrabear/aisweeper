@@ -1,3 +1,8 @@
+//! a lazy initialized game board
+//!
+//! This module exports the [LazyGameBoard], a wrapper around a [BaseGameBoard] that does not init the board until a move has been played.
+//! This can be useful for wrapping [BaseGameBoard]'s that can only be created at the time of a move being made.
+
 use super::gameboard::{
 	BaseGameBoard, BaseGameBoard_do_event, FlatBoard, GameBoard, GameBoardEvent, KeyEvent,
 	NewBoardError, UndoError, UnopenableError, VisibleTile,
@@ -41,7 +46,7 @@ macro_rules! lazy_call {
 	};
 }
 
-use LazyGameBoardInner::*;
+use LazyGameBoardInner::{Init, Uninit};
 
 impl<B: BaseGameBoard> BaseGameBoard for LazyGameBoard<B> {
 	fn with_clearing(

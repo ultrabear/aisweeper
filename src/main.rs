@@ -1,6 +1,8 @@
-//#![warn(clippy::nursery)]
+//! main module
+
+#![warn(clippy::nursery)]
 #![warn(clippy::pedantic)]
-//#![warn(clippy::cargo)]
+#![warn(clippy::cargo)]
 mod gameboard;
 mod lazy;
 mod logged;

@@ -1,4 +1,7 @@
-/// main ui interactions, houses rendering for game view and integrations with cursive
+//! main ui interactions, houses rendering for game view and integrations with cursive
+//!
+//! Defines the [MineGameView], an implementor of [View] for a cursive user interface
+
 use crate::gameboard;
 use gameboard::{BaseGameBoard, GameBoard, KeyEvent, NewBoardError, Tile, VisibleTile};
 

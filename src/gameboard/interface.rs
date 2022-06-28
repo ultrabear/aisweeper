@@ -148,7 +148,7 @@ pub trait BaseGameBoard: Sized {
 		self.dimensions().1
 	}
 
-	/// returns the bomb density as a float in the range [0,1]
+	/// returns the bomb density as a float in the range \[0,1\]
 	#[inline]
 	fn bomb_density(&self) -> f64 {
 		f64::from(self.bomb_count()) / f64::from(self.area())

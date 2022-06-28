@@ -1,7 +1,6 @@
 //! a logged game board implementation that stores every move
 //!
-//! defines the [`KeyEvent`](enum.KeyEvent.html) and [`LoggedGameBoard`](struct.LoggedGameBoard.html), structures for logging and storing keystrokes and the logging implementation itself
-//! most methods are re exported from [`GameBoard`](../types/gameboard/struct.GameBoard.html), with move success details being rerouted to the logging system
+//! defines the [LoggedGameBoard] structure for logging which accepts a [BaseGameBoard] and consumes do_event calls to a logger
 
 use super::gameboard;
 
@@ -128,7 +127,7 @@ impl<T: BaseGameBoard> BaseGameBoard for LoggedGameBoard<T> {
 
 	fn do_event(&mut self, k: KeyEvent) -> Result<(), UnopenableError> {
 		{
-			use KeyEvent::*;
+			use KeyEvent::{Mouse1, Mouse2};
 			match k {
 				Mouse1(x, y) => {
 					let tile = self
