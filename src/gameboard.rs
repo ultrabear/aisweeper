@@ -3,13 +3,20 @@ use std::iter::repeat;
 
 use rand::prelude::*;
 
-use super::tiles;
-use tiles::{BoardTile, Tile, Visibility, VisibleTile};
+mod tiles;
+use tiles::{BoardTile, Visibility};
 
-use super::errors::{assert_not_bomb, NewBoardError, UndoError, UnopenableError};
+pub use tiles::{Tile, VisibleTile};
+
+mod errors;
+use errors::assert_not_bomb;
+pub use errors::{NewBoardError, UndoError, UnopenableError};
 
 mod flatboard;
 pub use flatboard::{FlatBoard, IterBacking, IterBackingMut};
+
+mod interface;
+pub use interface::{BaseGameBoard, BaseGameBoard_do_event, GameBoardEvent, KeyEvent};
 
 #[derive(Debug)]
 pub struct GameBoard {
@@ -18,84 +25,17 @@ pub struct GameBoard {
 	pub(self) board: FlatBoard<BoardTile>,
 }
 
-/*fn gen_2d_array<T: Clone>(x: usize, y: usize, insert: T) -> Vec<Vec<T>> {
-
-	repeat(repeat(insert).take(y).collect()).take(x).collect()
-}*/
-
-fn gen_2d_array<T: Clone>(x: usize, y: usize, insert: T) -> FlatBoard<T> {
-	FlatBoard::new(x, y, insert)
-}
-
-/// an event that gives full detail to undo the action in an efficient manner, at the cost of memory use.
-pub enum GameBoardEvent {
-	/// a opening of a set of cells, represented by an array of x/y coordinates
-	OpenCell(Box<[(u16, u16)]>),
-	/// a flag/unflag of a cell
-	ToggleFlagCell(u16, u16),
-}
-
-impl From<Vec<(u16, u16)>> for GameBoardEvent {
-	fn from(v: Vec<(u16, u16)>) -> Self {
-		Self::OpenCell(v.into())
-	}
-}
-
-impl GameBoardEvent {
-	pub fn flag_cell(x: u16, y: u16) -> Self {
-		Self::ToggleFlagCell(x, y)
-	}
-}
-
-impl<'a, T: 'a> IterBackingMut<'a, T, std::iter::Flatten<std::slice::IterMut<'a, Vec<T>>>>
-	for Vec<Vec<T>>
-{
-	fn iter_backing_mut(&'a mut self) -> std::iter::Flatten<std::slice::IterMut<'a, Vec<T>>> {
-		self.iter_mut().flatten()
-	}
-}
-
-impl<'a, T: 'a> IterBacking<'a, T, std::iter::Flatten<std::slice::Iter<'a, Vec<T>>>>
-	for Vec<Vec<T>>
-{
-	fn iter_backing(&'a self) -> std::iter::Flatten<std::slice::Iter<'a, Vec<T>>> {
-		self.iter().flatten()
-	}
-}
-
+#[inline]
 fn widening_mul(a: u16, b: u16) -> u32 {
 	u32::from(a) * u32::from(b)
 }
 
-fn widen_xy(x: u16, y: u16) -> (usize, usize) {
+fn widen_xy<T: From<S>, S>(x: S, y: S) -> (T, T) {
 	(x.into(), y.into())
 }
 
 /// basic utils
 impl GameBoard {
-	pub fn bomb_count(&self) -> u32 {
-		self.bombs
-	}
-
-	/// returns bomb density as a percentage in the range \[0,1\]
-	pub fn bomb_density(&self) -> f64 {
-		f64::from(self.bomb_count()) / f64::from(self.area())
-	}
-
-	/// returns the x/y dimensions of a game board
-	pub fn dimensions(&self) -> (u16, u16) {
-		(
-			self.board.dimensions().1.try_into().unwrap(),
-			self.board.len().try_into().unwrap(),
-		)
-	}
-
-	/// returns the computed x*y area of a game board
-	pub fn area(&self) -> u32 {
-		let (x, y) = self.dimensions();
-		widening_mul(x, y)
-	}
-
 	/// builds every point that is accessible in a 3x3 grid around a specified point
 	fn normalize_around_3x3(&self, orig_x: u16, orig_y: u16) -> Vec<(usize, usize)> {
 		// SAFETY: Converted back to usize before use, only used as indexing so negatives will overflow
@@ -256,7 +196,7 @@ impl GameBoard {
 	fn blank_board(x: u16, y: u16, bombs: u32) -> Self {
 		Self {
 			bombs,
-			board: gen_2d_array(
+			board: FlatBoard::new(
 				y.into(),
 				x.into(),
 				BoardTile {
@@ -302,8 +242,66 @@ impl GameBoard {
 		Ok(())
 	}
 
+	/// generates a new board
+	pub fn new(x: u16, y: u16, bombs: u32) -> Result<Self, NewBoardError> {
+		Self::validate_board(x, y, bombs, false, None)?;
+		let mut gb = Self::blank_board(x, y, bombs);
+
+		gb.populate();
+
+		Ok(gb)
+	}
+
+	/// opens all visible tiles it sees, appends each coordinate to opened, and returns a final count of the amount of cells opened
+	fn inner_open_visible(&mut self, opened: &mut Vec<(u16, u16)>) -> usize {
+		let mut opened_count = 0usize;
+
+		for y in 0..self.board.len() {
+			for x in 0..self.board[y].len() {
+				let tile = self.board[y][x];
+				if tile.visible == Visibility::Visible && tile.tile == Tile::Zero {
+					for (x, y) in self.normalize_around_3x3(x as u16, y as u16) {
+						let (x, y) = (x as u16, y as u16);
+						match self.get(x, y).unwrap().visible {
+							Visibility::NotVisible => {
+								opened.push((x, y));
+								opened_count += 1;
+								// SAFETY: all tiles around a tile are not bombs because the current tile is a Zero, so overwrite with a Visible
+								self.get_mut(x, y).unwrap().visible = Visibility::Visible;
+							}
+							_ => (),
+						}
+					}
+				}
+			}
+		}
+		opened_count
+	}
+
+	/// opens all tiles that are naively open-able and stores in out_arr
+	fn open_visible(&mut self, out_arr: &mut Vec<(u16, u16)>) {
+		let mut per_iter = self.inner_open_visible(out_arr);
+
+		while per_iter != 0 {
+			per_iter = self.inner_open_visible(out_arr);
+		}
+	}
+}
+
+impl BaseGameBoard for GameBoard {
+	fn bomb_count(&self) -> u32 {
+		self.bombs
+	}
+
+	fn dimensions(&self) -> (u16, u16) {
+		(
+			self.board.dimensions().1.try_into().unwrap(),
+			self.board.len().try_into().unwrap(),
+		)
+	}
+
 	/// generates a new board with a given clear zone where no bombs will be guaranteed
-	pub fn with_clearing(
+	fn with_clearing(
 		x: u16,
 		y: u16,
 		bombs: u32,
@@ -319,41 +317,8 @@ impl GameBoard {
 		Ok(gb)
 	}
 
-	/// generates a new board
-	pub fn new(x: u16, y: u16, bombs: u32) -> Result<Self, NewBoardError> {
-		Self::validate_board(x, y, bombs, false, None)?;
-		let mut gb = Self::blank_board(x, y, bombs);
-
-		gb.populate();
-
-		Ok(gb)
-	}
-
-	/// creates a new board with the given bomb density on a scale of 0-1
-	pub fn with_density(x: u16, y: u16, density: f64) -> Result<Self, NewBoardError> {
-		if !(0. <= density && density <= 1.) {
-			return Err(NewBoardError::BombOverflow);
-		}
-
-		let bombcount = (f64::from(widening_mul(x, y)) * density).round() as u32;
-
-		Self::new(x, y, bombcount)
-	}
-
-	/// gets a specific tile on the board for public inspection
-	pub fn get_board_tile(&self, x: u16, y: u16) -> Option<VisibleTile> {
-		let (x, y) = widen_xy(x, y);
-
-		let tile = self.board.get(y)?.get(x)?;
-		Some(match tile.visible {
-			Visibility::Visible => VisibleTile::Visible(tile.tile),
-			Visibility::NotVisible => VisibleTile::NotVisible,
-			Visibility::Flagged => VisibleTile::Flagged,
-		})
-	}
-
 	/// opens the 8 tiles around a tile
-	pub fn open_around(&mut self, x: u16, y: u16) -> Result<Vec<(u16, u16)>, UnopenableError> {
+	fn open_around(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
 		let openable = self.normalize_around_3x3(x, y);
 
 		let mut opened = Vec::with_capacity(openable.len());
@@ -397,52 +362,13 @@ impl GameBoard {
 		}
 
 		// open visible tiles to complete cycle
-		opened.extend(self.open_visible());
+		self.open_visible(&mut opened);
 
-		Ok(opened)
-	}
-
-	/// opens all visible tiles it sees, appends each coordinate to opened, and returns a final count of the amount of cells opened
-	fn inner_open_visible(&mut self, opened: &mut Vec<(u16, u16)>) -> usize {
-		let mut opened_count = 0usize;
-
-		for y in 0..self.board.len() {
-			for x in 0..self.board[y].len() {
-				let tile = self.board[y][x];
-				if tile.visible == Visibility::Visible && tile.tile == Tile::Zero {
-					for (x, y) in self.normalize_around_3x3(x as u16, y as u16) {
-						let (x, y) = (x as u16, y as u16);
-						match self.get(x, y).unwrap().visible {
-							Visibility::NotVisible => {
-								opened.push((x, y));
-								opened_count += 1;
-								// SAFETY: all tiles around a tile are not bombs because the current tile is a Zero, so overwrite with a Visible
-								self.get_mut(x, y).unwrap().visible = Visibility::Visible;
-							}
-							_ => (),
-						}
-					}
-				}
-			}
-		}
-		opened_count
-	}
-
-	/// opens all tiles that are naively open-able and returns the tiles that were opened
-	pub fn open_visible(&mut self) -> Vec<(u16, u16)> {
-		let mut out_arr = Vec::new();
-
-		let mut per_iter = self.inner_open_visible(&mut out_arr);
-
-		while per_iter != 0 {
-			per_iter = self.inner_open_visible(&mut out_arr);
-		}
-
-		out_arr
+		Ok(opened.into())
 	}
 
 	/// opens the given tile
-	pub fn open_tile(&mut self, x: u16, y: u16) -> Result<Vec<(u16, u16)>, UnopenableError> {
+	fn open_tile(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
 		let tile = self.tile_or_unopenable(x, y)?;
 		let (x, y) = widen_xy(x, y);
 
@@ -459,53 +385,47 @@ impl GameBoard {
 		// already confirmed bounds using get(y).get(x)
 		self.board[y][x].visible = Visibility::Visible;
 
-		let mut opened = self.open_visible();
+		let mut opened = Vec::new();
+		self.open_visible(&mut opened);
 		// include own tile
 		opened.push((x as u16, y as u16));
-		Ok(opened)
+
+		Ok(opened.into())
 	}
 
 	/// flags or unflags a tile depending on whether it is flagged already
 	/// errors on an already open tile
-	pub fn flag_tile(&mut self, x: u16, y: u16) -> Result<(), UnopenableError> {
+	fn flag_tile(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
 		let tile = self.tile_or_unopenable(x, y)?;
-		let (x, y) = widen_xy(x, y);
+		let (bx, by) = widen_xy(x, y);
 
 		match tile.visible {
 			Visibility::Visible => Err(UnopenableError::AlreadyOpen),
 			Visibility::Flagged => {
-				self.board[y][x].visible = Visibility::NotVisible;
-				Ok(())
+				self.board[by][bx].visible = Visibility::NotVisible;
+				Ok(GameBoardEvent::flag_tile(x, y))
 			}
 			Visibility::NotVisible => {
-				self.board[y][x].visible = Visibility::Flagged;
-				Ok(())
+				self.board[by][bx].visible = Visibility::Flagged;
+				Ok(GameBoardEvent::flag_tile(x, y))
 			}
 		}
 	}
 
-	pub fn render(&self) -> FlatBoard<VisibleTile> {
-		let (y, x) = self.board.dimensions();
+	/// gets a specific tile on the board for public inspection
+	fn get_board_tile(&self, x: u16, y: u16) -> Option<VisibleTile> {
+		let (x, y) = widen_xy(x, y);
 
-		let mut board = FlatBoard::new(y, x, VisibleTile::NotVisible);
-
-		let mut it = self.board.iter_backing();
-
-		for j in board.iter_backing_mut() {
-			let tile = it.next().expect("Sizes were not correctly constrained");
-
-			*j = match tile.visible {
-				Visibility::NotVisible => VisibleTile::NotVisible,
-				Visibility::Visible => VisibleTile::Visible(tile.tile),
-				Visibility::Flagged => VisibleTile::Flagged,
-			};
-		}
-
-		board
+		let tile = self.board.get(y)?.get(x)?;
+		Some(match tile.visible {
+			Visibility::Visible => VisibleTile::Visible(tile.tile),
+			Visibility::NotVisible => VisibleTile::NotVisible,
+			Visibility::Flagged => VisibleTile::Flagged,
+		})
 	}
 
 	/// undoes a move specified by a gameboard event
-	pub fn undo_move(&mut self, event: &GameBoardEvent) -> Result<(), UndoError> {
+	fn undo_move(&mut self, event: &GameBoardEvent) -> Result<(), UndoError> {
 		Ok(match event {
 			GameBoardEvent::ToggleFlagCell(x, y) => self
 				.get_mut(*x, *y)
@@ -525,24 +445,24 @@ impl GameBoard {
 			}
 		})
 	}
-}
 
-impl fmt::Display for GameBoard {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		const FLAG_CHAR: &str = "\u{2691}";
+	fn render(&self) -> FlatBoard<VisibleTile> {
+		let (y, x) = self.board.dimensions();
 
-		for y in self.board.iter() {
-			for x in y.iter() {
-				use Visibility::*;
-				match x.visible {
-					Visible => write!(f, "\u{1b}[47m{}", x.tile)?,
-					NotVisible => write!(f, "\u{1b}[30;107m  ")?,
-					Flagged => write!(f, "\u{1b}[30;107m{FLAG_CHAR} ")?,
-				}
-			}
-			write!(f, "\u{1b}[0m\n\u{1b}[107m")?;
+		let mut board = FlatBoard::new(y, x, VisibleTile::NotVisible);
+
+		let mut it = self.board.iter_backing();
+
+		for j in board.iter_backing_mut() {
+			let tile = it.next().expect("Sizes were not correctly constrained");
+
+			*j = match tile.visible {
+				Visibility::NotVisible => VisibleTile::NotVisible,
+				Visibility::Visible => VisibleTile::Visible(tile.tile),
+				Visibility::Flagged => VisibleTile::Flagged,
+			};
 		}
 
-		write!(f, "\u{1b}[0m")
+		board
 	}
 }

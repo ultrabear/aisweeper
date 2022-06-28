@@ -1,17 +1,16 @@
-use super::types;
+//! a logged game board implementation that stores every move
+//!
+//! defines the [`KeyEvent`](enum.KeyEvent.html) and [`LoggedGameBoard`](struct.LoggedGameBoard.html), structures for logging and storing keystrokes and the logging implementation itself
+//! most methods are re exported from [`GameBoard`](../types/gameboard/struct.GameBoard.html), with move success details being rerouted to the logging system
 
-use types::{FlatBoard, GameBoard, GameBoardEvent, NewBoardError, UnopenableError, VisibleTile};
+use super::gameboard;
+
+use gameboard::{
+	BaseGameBoard, FlatBoard, GameBoardEvent, KeyEvent, NewBoardError, UndoError, UnopenableError,
+	VisibleTile,
+};
 
 use time;
-
-#[derive(Copy, Clone, Debug)]
-pub enum KeyEvent {
-	Mouse1(u16, u16),
-	Mouse2(u16, u16),
-	Pause,
-	UnPause,
-	Idle,
-}
 
 /// internally stored keyevent that also stores any effect it had on the gameboard
 enum KeyEventEffect {
@@ -44,16 +43,16 @@ struct LogFrame {
 	trace: KeyEventEffect,
 }
 
-pub struct LoggedGameBoard {
+pub struct LoggedGameBoard<GB: BaseGameBoard> {
 	start_time: time::OffsetDateTime,
 	start_mono: time::Instant,
 
-	board: GameBoard,
+	board: GB,
 
 	events: Vec<LogFrame>,
 }
 
-impl LoggedGameBoard {
+impl<T: BaseGameBoard> LoggedGameBoard<T> {
 	pub fn start_new(
 		x: u16,
 		y: u16,
@@ -64,7 +63,7 @@ impl LoggedGameBoard {
 		let mut board = Self {
 			start_time: time::OffsetDateTime::now_utc(),
 			start_mono: time::Instant::now(),
-			board: GameBoard::with_clearing(x, y, bombs, opening_x, opening_y)?,
+			board: T::with_clearing(x, y, bombs, opening_x, opening_y)?,
 			events: vec![],
 		};
 
@@ -88,59 +87,49 @@ impl LoggedGameBoard {
 	}
 }
 
-impl LoggedGameBoard {
-	pub fn bomb_count(&self) -> u32 {
-		self.board.bomb_count()
-	}
-	pub fn bomb_density(&self) -> f64 {
-		self.board.bomb_density()
+impl<T: BaseGameBoard> BaseGameBoard for LoggedGameBoard<T> {
+	fn with_clearing(
+		x: u16,
+		y: u16,
+		bombs: u32,
+		clearx: u16,
+		cleary: u16,
+	) -> Result<Self, NewBoardError> {
+		Self::start_new(x, y, bombs, clearx, cleary)
 	}
 
-	pub fn dimensions(&self) -> (u16, u16) {
+	fn bomb_count(&self) -> u32 {
+		self.board.bomb_count()
+	}
+	fn dimensions(&self) -> (u16, u16) {
 		self.board.dimensions()
 	}
 
-	pub fn area(&self) -> u32 {
-		self.board.area()
-	}
-
-	pub fn get_board_tile(&self, x: u16, y: u16) -> Option<VisibleTile> {
+	fn get_board_tile(&self, x: u16, y: u16) -> Option<VisibleTile> {
 		self.board.get_board_tile(x, y)
 	}
 
-	pub fn open_around(&mut self, x: u16, y: u16) -> Result<(), UnopenableError> {
-		let res = self.board.open_around(x, y)?;
-
-		self.events.push(LogFrame {
-			trace: KeyEventEffect::Mouse1(x, y, res.into()),
-			time_offset_micros: self.current_micros_offset(),
-		});
-
-		Ok(())
+	fn open_around(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
+		self.board.open_around(x, y)
 	}
 
-	pub fn open_tile(&mut self, x: u16, y: u16) -> Result<(), UnopenableError> {
-		let res = self.board.open_tile(x, y)?;
-
-		self.events.push(LogFrame {
-			trace: KeyEventEffect::Mouse1(x, y, res.into()),
-			time_offset_micros: self.current_micros_offset(),
-		});
-
-		Ok(())
-	}
-	pub fn flag_tile(&mut self, x: u16, y: u16) -> Result<(), UnopenableError> {
-		self.board.flag_tile(x, y)?;
-
-		self.events.push(LogFrame {
-			trace: KeyEventEffect::Mouse2(x, y, GameBoardEvent::flag_cell(x, y)),
-			time_offset_micros: self.current_micros_offset(),
-		});
-
-		Ok(())
+	fn open_tile(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
+		self.board.open_tile(x, y)
 	}
 
-	pub fn do_event(&mut self, k: KeyEvent) -> Result<(), UnopenableError> {
+	fn flag_tile(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
+		self.board.flag_tile(x, y)
+	}
+
+	fn render(&self) -> FlatBoard<VisibleTile> {
+		self.board.render()
+	}
+
+	fn undo_move(&mut self, f: &GameBoardEvent) -> Result<(), UndoError> {
+		self.board.undo_move(f)
+	}
+
+	fn do_event(&mut self, k: KeyEvent) -> Result<(), UnopenableError> {
 		{
 			use KeyEvent::*;
 			match k {
@@ -174,7 +163,7 @@ impl LoggedGameBoard {
 					};
 
 					self.events.push(LogFrame {
-						trace: KeyEventEffect::Mouse2(x, y, GameBoardEvent::flag_cell(x, y)),
+						trace: KeyEventEffect::Mouse2(x, y, GameBoardEvent::flag_tile(x, y)),
 						time_offset_micros: self.current_micros_offset(),
 					});
 				}
@@ -188,9 +177,5 @@ impl LoggedGameBoard {
 		}
 
 		Ok(())
-	}
-
-	pub fn render(&self) -> FlatBoard<VisibleTile> {
-		self.board.render()
 	}
 }

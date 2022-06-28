@@ -18,6 +18,24 @@ pub trait IterBackingMut<'a, T: 'a, I: Iterator<Item = &'a mut T>> {
 	fn iter_backing_mut(&'a mut self) -> I;
 }
 
+// vector implementations
+impl<'a, T: 'a> IterBackingMut<'a, T, std::iter::Flatten<std::slice::IterMut<'a, Vec<T>>>>
+	for Vec<Vec<T>>
+{
+	fn iter_backing_mut(&'a mut self) -> std::iter::Flatten<std::slice::IterMut<'a, Vec<T>>> {
+		self.iter_mut().flatten()
+	}
+}
+
+impl<'a, T: 'a> IterBacking<'a, T, std::iter::Flatten<std::slice::Iter<'a, Vec<T>>>>
+	for Vec<Vec<T>>
+{
+	fn iter_backing(&'a self) -> std::iter::Flatten<std::slice::Iter<'a, Vec<T>>> {
+		self.iter().flatten()
+	}
+}
+
+// new constructor
 impl<T: Clone> FlatBoard<T> {
 	/// generates a new 2d array
 	pub fn new(dim_1: usize, dim_2: usize, default: T) -> Self {

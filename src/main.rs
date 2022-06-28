@@ -1,17 +1,24 @@
+#![warn(clippy::nursery)]
+#![warn(clippy::pedantic)]
+mod gameboard;
+mod lazy;
 mod logged;
-mod types;
 mod ui;
 
-use ui::MineGameView;
-
+use gameboard::GameBoard;
+use lazy::LazyGameBoard;
 use logged::LoggedGameBoard;
+use ui::MineGameView;
 
 use cursive::crossterm;
 
 fn main() {
 	let mut cursive = crossterm();
 
-	cursive.add_layer(MineGameView::new(16, 16, 40).unwrap());
+	let view: MineGameView<LazyGameBoard<LoggedGameBoard<GameBoard>>> =
+		MineGameView::new_lazy(16, 16, 40).unwrap();
+
+	cursive.add_layer(view);
 
 	cursive.add_global_callback('q', |s| s.quit());
 
