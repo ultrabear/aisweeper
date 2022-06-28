@@ -15,11 +15,12 @@ pub enum Tile {
 }
 
 impl Tile {
+	/// returns true if tile is of variant Bomb
 	pub const fn is_bomb(self) -> bool {
 		matches!(self, Tile::Bomb)
 	}
 
-	// Returns self as count of bombs in 8 surrounding squares, or None if is a bomb
+	/// Returns self as count of bombs in 8 surrounding squares, or None if is a bomb
 	pub const fn as_count(self) -> Option<u8> {
 		match self {
 			Tile::Bomb => None,
