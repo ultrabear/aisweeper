@@ -27,6 +27,8 @@ pub enum UnopenableError {
 	OutOfBounds,
 	#[error("flag count does not match count of tile")]
 	FlagCountMismatch,
+	#[error("game has already ended")]
+	GameOver,
 }
 
 /// an error returned when the [BaseGameBoard][super::BaseGameBoard] failed to undo a move

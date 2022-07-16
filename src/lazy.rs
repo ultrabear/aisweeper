@@ -61,6 +61,20 @@ impl<B: BaseGameBoard> BaseGameBoard for LazyGameBoard<B> {
 		)?)))
 	}
 
+	fn flagged(&self) -> u32 {
+		match self.0 {
+			Init(ref board) => board.flagged(),
+			Uninit { .. } => 0,
+		}
+	}
+
+	fn opened(&self) -> u32 {
+		match self.0 {
+			Init(ref board) => board.opened(),
+			Uninit { .. } => 0,
+		}
+	}
+
 	fn open_around(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
 		lazy_call!(self, open_around, x, y, B)
 	}
@@ -71,6 +85,20 @@ impl<B: BaseGameBoard> BaseGameBoard for LazyGameBoard<B> {
 
 	fn flag_tile(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
 		lazy_call!(self, flag_tile, x, y, B)
+	}
+
+	fn lose_game(&mut self) {
+		match self.0 {
+			Init(ref mut board) => board.lose_game(),
+			Uninit { .. } => {}
+		}
+	}
+
+	fn win_game(&mut self) -> Result<(), u32> {
+		match self.0 {
+			Init(ref mut board) => board.win_game(),
+			Uninit { .. } => Err(self.tiles_left()),
+		}
 	}
 
 	fn undo_move(&mut self, ge: &GameBoardEvent) -> Result<(), UndoError> {

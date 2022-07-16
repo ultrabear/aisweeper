@@ -13,10 +13,13 @@ use lazy::LazyGameBoard;
 use logged::LoggedGameBoard;
 use ui::MineGameView;
 
+use cursive;
 use cursive::crossterm;
 use cursive::Cursive;
 
 fn main() {
+	cursive::logger::init();
+
 	let mut cursive = crossterm();
 
 	let view: MineGameView<LazyGameBoard<LoggedGameBoard<GameBoard>>> =

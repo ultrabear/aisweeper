@@ -23,9 +23,12 @@ pub use interface::{BaseGameBoard, BaseGameBoard_do_event, GameBoardEvent, KeyEv
 
 #[derive(Debug)]
 pub struct GameBoard {
-	pub(self) bombs: u32,
+	bombs: u32,
+	flagged_tiles: u32,
+	opened_tiles: u32,
+	lost: bool,
 	// board is indexed as y/x but the api uses x/y
-	pub(self) board: FlatBoard<BoardTile>,
+	board: FlatBoard<BoardTile>,
 }
 
 #[inline]
@@ -199,6 +202,9 @@ impl GameBoard {
 	fn blank_board(x: u16, y: u16, bombs: u32) -> Self {
 		Self {
 			bombs,
+			flagged_tiles: 0,
+			opened_tiles: 0,
+			lost: false,
 			board: FlatBoard::new(
 				y.into(),
 				x.into(),
@@ -285,8 +291,17 @@ impl GameBoard {
 			per_iter = self.inner_open_visible(out_arr);
 		}
 	}
+
+	fn assert_not_lost(&self) -> Result<(), UnopenableError> {
+		if self.lost {
+			Err(UnopenableError::GameOver)
+		} else {
+			Ok(())
+		}
+	}
 }
 
+// core implementation of BaseGameBoard
 impl BaseGameBoard for GameBoard {
 	fn bomb_count(&self) -> u32 {
 		self.bombs
@@ -297,6 +312,14 @@ impl BaseGameBoard for GameBoard {
 			self.board.dimensions().1.try_into().unwrap(),
 			self.board.len().try_into().unwrap(),
 		)
+	}
+
+	fn flagged(&self) -> u32 {
+		self.flagged_tiles
+	}
+
+	fn opened(&self) -> u32 {
+		self.opened_tiles
 	}
 
 	/// generates a new board with a given clear zone where no bombs will be guaranteed
@@ -318,6 +341,7 @@ impl BaseGameBoard for GameBoard {
 
 	/// opens the 8 tiles around a tile
 	fn open_around(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
+		self.assert_not_lost()?;
 		let openable = self.normalize_around_3x3(x, y);
 
 		let mut opened = Vec::with_capacity(openable.len());
@@ -362,11 +386,14 @@ impl BaseGameBoard for GameBoard {
 		// open visible tiles to complete cycle
 		self.open_visible(&mut opened);
 
+		self.opened_tiles += u32::try_from(opened.len()).unwrap();
+
 		Ok(opened.into())
 	}
 
 	/// opens the given tile
 	fn open_tile(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
+		self.assert_not_lost()?;
 		let tile = self.tile_or_unopenable(x, y)?;
 		let (x, y) = widen_xy(x, y);
 
@@ -388,12 +415,15 @@ impl BaseGameBoard for GameBoard {
 		// include own tile
 		opened.push((x as u16, y as u16));
 
+		self.opened_tiles += u32::try_from(opened.len()).unwrap();
+
 		Ok(opened.into())
 	}
 
 	/// flags or unflags a tile depending on whether it is flagged already
 	/// errors on an already open tile
 	fn flag_tile(&mut self, x: u16, y: u16) -> Result<GameBoardEvent, UnopenableError> {
+		self.assert_not_lost()?;
 		let tile = self.tile_or_unopenable(x, y)?;
 		let (bx, by) = widen_xy(x, y);
 
@@ -401,10 +431,12 @@ impl BaseGameBoard for GameBoard {
 			Visibility::Visible => Err(UnopenableError::AlreadyOpen),
 			Visibility::Flagged => {
 				self.board[by][bx].visible = Visibility::NotVisible;
+				self.flagged_tiles -= 1;
 				Ok(GameBoardEvent::flag_tile(x, y))
 			}
 			Visibility::NotVisible => {
 				self.board[by][bx].visible = Visibility::Flagged;
+				self.flagged_tiles += 1;
 				Ok(GameBoardEvent::flag_tile(x, y))
 			}
 		}
@@ -425,17 +457,24 @@ impl BaseGameBoard for GameBoard {
 	/// undoes a move specified by a gameboard event
 	fn undo_move(&mut self, event: &GameBoardEvent) -> Result<(), UndoError> {
 		match event {
-			GameBoardEvent::ToggleFlagCell(x, y) => self
-				.get_mut(*x, *y)
-				.ok_or(UndoError::OutOfBounds)?
-				.swap_flag()
-				.or(Err(UndoError::AlreadyOpen))?,
+			&GameBoardEvent::ToggleFlagCell(x, y) => {
+				self.get_mut(x, y)
+					.ok_or(UndoError::OutOfBounds)?
+					.swap_flag()
+					.or(Err(UndoError::AlreadyOpen))?;
+				if self.get(x, y).unwrap().visible == Visibility::NotVisible {
+					self.flagged_tiles -= 1;
+				} else {
+					self.flagged_tiles += 1;
+				}
+			}
 			GameBoardEvent::OpenCell(cells) => {
 				for (x, y) in cells.iter().copied() {
 					let tile = self.get_mut(x, y).ok_or(UndoError::OutOfBounds)?;
 
 					if Visibility::Visible == tile.visible {
 						tile.visible = Visibility::NotVisible;
+						self.opened_tiles -= 1;
 					} else {
 						return Err(UndoError::AlreadyClosed);
 					}
@@ -464,5 +503,20 @@ impl BaseGameBoard for GameBoard {
 		}
 
 		board
+	}
+
+	fn win_game(&mut self) -> Result<(), u32> {
+		todo!()
+	}
+	fn lose_game(&mut self) {
+		if std::mem::replace(&mut self.lost, true) {
+			return;
+		}
+
+		for i in self.board.iter_backing_mut() {
+			if i.tile.is_bomb() {
+				i.visible = Visibility::Visible;
+			}
+		}
 	}
 }

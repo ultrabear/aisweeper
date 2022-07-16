@@ -8,6 +8,17 @@ pub struct FlatBoard<T> {
 	data: Box<[T]>,
 }
 
+// manually implementing circumvents T being default
+impl<T> Default for FlatBoard<T> {
+	fn default() -> Self {
+		Self {
+			dim_1: 0,
+			dim_2: 0,
+			data: Box::new([]),
+		}
+	}
+}
+
 pub type Row<T> = [T];
 
 pub trait IterBacking<'a, T: 'a, I: Iterator<Item = &'a T>> {
@@ -18,30 +29,29 @@ pub trait IterBackingMut<'a, T: 'a, I: Iterator<Item = &'a mut T>> {
 	fn iter_backing_mut(&'a mut self) -> I;
 }
 
+use std::iter;
+use std::slice;
+
 // vector implementations
-impl<'a, T: 'a> IterBackingMut<'a, T, std::iter::Flatten<std::slice::IterMut<'a, Vec<T>>>>
-	for Vec<Vec<T>>
-{
-	fn iter_backing_mut(&'a mut self) -> std::iter::Flatten<std::slice::IterMut<'a, Vec<T>>> {
+type MutVecBacking<'a, T> = iter::Flatten<slice::IterMut<'a, Vec<T>>>;
+impl<'a, T> IterBackingMut<'a, T, MutVecBacking<'a, T>> for Vec<Vec<T>> {
+	fn iter_backing_mut(&'a mut self) -> MutVecBacking<'a, T> {
 		self.iter_mut().flatten()
 	}
 }
 
-impl<'a, T: 'a> IterBacking<'a, T, std::iter::Flatten<std::slice::Iter<'a, Vec<T>>>>
-	for Vec<Vec<T>>
-{
-	fn iter_backing(&'a self) -> std::iter::Flatten<std::slice::Iter<'a, Vec<T>>> {
+type VecBacking<'a, T> = iter::Flatten<slice::Iter<'a, Vec<T>>>;
+impl<'a, T> IterBacking<'a, T, VecBacking<'a, T>> for Vec<Vec<T>> {
+	fn iter_backing(&'a self) -> VecBacking<'a, T> {
 		self.iter().flatten()
 	}
 }
 
 // new constructor
 impl<T: Clone> FlatBoard<T> {
-	/// generates a new 2d array
+	/// generates a new 2d array using default as fill in
 	pub fn new(dim_1: usize, dim_2: usize, default: T) -> Self {
-		let array_len = dim_1
-			.checked_mul(dim_2)
-			.expect("array length overflowed usize");
+		let array_len = Self::array_length(dim_1, dim_2);
 
 		Self {
 			dim_1,
@@ -51,7 +61,27 @@ impl<T: Clone> FlatBoard<T> {
 	}
 }
 
+impl<T: Default> FlatBoard<T> {
+	/// generates a new 2d array using T's default method as fill in
+	pub fn new_default(dim_1: usize, dim_2: usize) -> Self {
+		let array_len = Self::array_length(dim_1, dim_2);
+
+		Self {
+			dim_1,
+			dim_2,
+			data: repeat(()).map(|_| T::default()).take(array_len).collect(),
+		}
+	}
+}
+
 impl<T> FlatBoard<T> {
+	/// helper method to return an arrays length from its 2 dimensions or panic on overflow
+	fn array_length(dim_1: usize, dim_2: usize) -> usize {
+		dim_1
+			.checked_mul(dim_2)
+			.expect("array length overflowed usize")
+	}
+
 	/// returns dimensions of flatboard
 	#[inline]
 	pub const fn dimensions(&self) -> (usize, usize) {
@@ -64,6 +94,7 @@ impl<T> FlatBoard<T> {
 		self.dim_1
 	}
 
+	/// gets a reference to a [`Row`] of T from the board at the given index, or returns [`None`] on out of bounds
 	#[inline]
 	pub fn get(&self, idx: usize) -> Option<&Row<T>> {
 		if self.dim_1 <= idx {
@@ -75,6 +106,7 @@ impl<T> FlatBoard<T> {
 		}
 	}
 
+	/// gets a mutable reference to a [`Row`] of T from the board at the given index, or returns [`None`] on out of bounds
 	#[inline]
 	pub fn get_mut(&mut self, idx: usize) -> Option<&mut Row<T>> {
 		if self.dim_1 <= idx {
@@ -86,13 +118,15 @@ impl<T> FlatBoard<T> {
 		}
 	}
 
+	/// iterates over the board, returning each [`Row`] in sequence
 	#[inline]
-	pub fn iter(&self) -> impl Iterator<Item = &[T]> {
+	pub fn iter(&self) -> impl Iterator<Item = &Row<T>> {
 		self.data.chunks(self.dim_2)
 	}
 
+	/// iterates over the board mutably, returning each [`Row`] in sequence
 	#[inline]
-	pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut [T]> {
+	pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Row<T>> {
 		self.data.chunks_mut(self.dim_2)
 	}
 }

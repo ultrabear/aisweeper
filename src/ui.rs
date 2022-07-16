@@ -3,7 +3,9 @@
 //! Defines the [MineGameView], an implementor of [View] for a cursive user interface
 
 use crate::gameboard;
-use gameboard::{BaseGameBoard, GameBoard, KeyEvent, NewBoardError, Tile, VisibleTile};
+use gameboard::{
+	BaseGameBoard, GameBoard, KeyEvent, NewBoardError, Tile, UnopenableError, VisibleTile,
+};
 
 use cursive::{
 	event,
@@ -136,10 +138,14 @@ impl<B: BaseGameBoard + 'static> View for MineGameView<B> {
 				match event {
 					MouseEvent::Press(b) => match b {
 						MouseButton::Left => {
-							let _ = self
-								.board
-								.do_event(KeyEvent::Mouse1(board_p.0, board_p.1))
-								.map_err(log_err);
+							if let Err(err) =
+								self.board.do_event(KeyEvent::Mouse1(board_p.0, board_p.1))
+							{
+								match err {
+									UnopenableError::BombHit => self.board.lose_game(),
+									_ => {}
+								}
+							}
 							EventResult::Consumed(None)
 						}
 						MouseButton::Right => {

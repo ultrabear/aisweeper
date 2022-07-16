@@ -83,6 +83,14 @@ impl<T: BaseGameBoard> LoggedGameBoard<T> {
 	}
 }
 
+macro_rules! impl_from_board {
+	($fn_name:ident, $restype:ty) => {
+		fn $fn_name(&self) -> $restype {
+			self.board.$fn_name()
+		}
+	};
+}
+
 impl<T: BaseGameBoard> BaseGameBoard for LoggedGameBoard<T> {
 	fn with_clearing(
 		x: u16,
@@ -94,12 +102,11 @@ impl<T: BaseGameBoard> BaseGameBoard for LoggedGameBoard<T> {
 		Self::start_new(x, y, bombs, clearx, cleary)
 	}
 
-	fn bomb_count(&self) -> u32 {
-		self.board.bomb_count()
-	}
-	fn dimensions(&self) -> (u16, u16) {
-		self.board.dimensions()
-	}
+	impl_from_board!(dimensions, (u16, u16));
+	impl_from_board!(bomb_count, u32);
+	impl_from_board!(flagged, u32);
+	impl_from_board!(opened, u32);
+	impl_from_board!(render, FlatBoard<VisibleTile>);
 
 	fn get_board_tile(&self, x: u16, y: u16) -> Option<VisibleTile> {
 		self.board.get_board_tile(x, y)
@@ -117,12 +124,16 @@ impl<T: BaseGameBoard> BaseGameBoard for LoggedGameBoard<T> {
 		self.board.flag_tile(x, y)
 	}
 
-	fn render(&self) -> FlatBoard<VisibleTile> {
-		self.board.render()
-	}
-
 	fn undo_move(&mut self, f: &GameBoardEvent) -> Result<(), UndoError> {
 		self.board.undo_move(f)
+	}
+
+	fn win_game(&mut self) -> Result<(), u32> {
+		self.board.win_game()
+	}
+
+	fn lose_game(&mut self) {
+		self.board.lose_game()
 	}
 
 	fn do_event(&mut self, k: KeyEvent) -> Result<(), UnopenableError> {

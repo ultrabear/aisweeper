@@ -82,6 +82,12 @@ pub trait BaseGameBoard: Sized {
 	/// returns the count of bombs in this board
 	fn bomb_count(&self) -> u32;
 
+	/// returns how many tiles have been successfully opened
+	fn opened(&self) -> u32;
+
+	/// returns how many tiles have been flagged
+	fn flagged(&self) -> u32;
+
 	/// generates a new board with a given 3x3 clear zone
 	fn with_clearing(
 		x: u16,
@@ -103,6 +109,14 @@ pub trait BaseGameBoard: Sized {
 
 	/// gets a tile on the board
 	fn get_board_tile(&self, x: u16, y: u16) -> Option<VisibleTile>;
+
+	/// ends a game in the failure state
+	fn lose_game(&mut self);
+
+	/// checks if a game was won and returns a result designating success or failure to win
+	///
+	/// the [`Err`] case returns a [`u32`] representing how many tiles are still closed and not bombs, can be expressed as area - bomb_count - opened
+	fn win_game(&mut self) -> Result<(), u32>;
 
 	/// processes a KeyEvent using mouse 1/2, default impl ignores other events
 	fn do_event(&mut self, k: KeyEvent) -> Result<(), UnopenableError> {
@@ -128,6 +142,18 @@ pub trait BaseGameBoard: Sized {
 		}
 
 		board
+	}
+
+	/// returns how many tiles are left to open
+	#[inline]
+	fn tiles_left(&self) -> u32 {
+		self.area() - self.bomb_count() - self.opened()
+	}
+
+	/// Returns the count of `(bomb_count - flagged)`, or in an ideal game, the amount of bombs that have not been flagged
+	#[inline]
+	fn unflagged_bombs(&self) -> u32 {
+		self.bomb_count() - self.flagged()
 	}
 
 	/// returns the computed x*y area of a game board with no possibility of overflow
